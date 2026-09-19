@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "matrixholo"
+version = "0.1.0"
+description = "Holographic Matrix-style 3D terminal and window renderer"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Senior Python Engineer"}]
+requires-python = ">=3.10.0,<3.11"
+dependencies = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+]
+
+[project.optional-dependencies]
+window = ["pyglet>=2.0"]
+dev = ["pytest>=7.4", "ruff>=0.1", "mypy>=1.5"]
+
+[project.scripts]
+matrixholo = "matrixholo.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["matrixholo*"]

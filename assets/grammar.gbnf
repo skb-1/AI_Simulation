@@ -1,0 +1,14 @@
+root ::= "[" ws (command (ws "," ws command)*)? ws "]"
+command ::= cmd-spawn-primitive | cmd-spawn-creature | cmd-modify | cmd-delete | cmd-idle
+cmd-spawn-primitive ::= "{" ws "\"action\"" ws ":" ws "\"spawn\"" ws "," ws "\"type\"" ws ":" ws ("\"cube\"" | "\"sphere\"" | "\"cylinder\"" | "\"cone\"" | "\"torus\"" | "\"line\"") ws "," ws "\"position\"" ws ":" ws "[" ws number ws "," ws number ws "," ws number ws "]"(ws "," ws "\"scale\"" ws ":" ws "[" ws number ws "," ws number ws "," ws number ws "]")? (ws "," ws "\"rotation\"" ws ":" ws "[" ws number ws "," ws number ws "," ws number ws "]")? (ws "," ws "\"color\"" ws ":" ws "[" ws number ws "," ws number ws "," ws number ws "]")? ws "}"
+cmd-spawn-creature ::= "{" ws "\"action\"" ws ":" ws "\"spawn_creature\"" ws "," ws "\"kind\"" ws ":" ws ("\"human\"" | "\"animal\"") ws "," ws "\"species\"" ws ":" ws string ws "," ws "\"position\"" ws ":" ws "[" ws number ws "," ws number ws "," ws number ws "]" ws "," ws "\"name\"" ws ":" ws string(ws "," ws "\"personality\"" ws ":" ws string)? (ws "," ws "\"traits\"" ws ":" ws string-number-dict)? ws "}"
+cmd-modify ::= "{" ws "\"action\"" ws ":" ws "\"modify\"" ws "," ws "\"target\"" ws ":" ws integer ws "," ws "\"property\"" ws ":" ws ("\"color\"" | "\"scale\"" | "\"position\"" | "\"rotation\"") ws "," ws "\"value\"" ws ":" ws number-array ws "}"
+cmd-delete ::= "{" ws "\"action\"" ws ":" ws "\"delete\"" ws "," ws "\"target\"" ws ":" ws integer ws "}"
+cmd-idle ::= "{" ws "\"action\"" ws ":" ws "\"idle\"" ws "}"
+string ::= "\"" ([^"\\\r\n] | "\\" ["\\/bfnrt])* "\""
+number ::= "-"? [0-9]+ ("." [0-9]+)? ([eE] [-+]? [0-9]+)?
+integer ::= "-"? [0-9]+
+boolean ::= "true" | "false"
+ws ::= [ \t\n\r]*
+number-array ::= "[" ws (number (ws "," ws number)*)? ws "]"
+string-number-dict ::= "{" ws (string ws ":" ws number (ws "," ws string ws ":" ws number)*)? ws "}"

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aicreator"
+version = "0.1.0"
+description = "AI Creator — Holographic Matrix Sandbox powered by local LLM"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Senior Python Engineer"}]
+requires-python = ">=3.10.0,<3.11"
+dependencies = [
+    "matrixholo>=0.1.0",
+    "llama-cpp-python>=0.2.90",
+    "pydantic>=2.5,<3",
+    "rich>=13.7",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+]
+
+[project.scripts]
+aicreator = "aicreator.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["aicreator*"]
