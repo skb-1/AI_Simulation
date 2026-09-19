@@ -1,4 +1,4 @@
-"""LLM engine interface using llama-cpp-python with GBNF grammar constraints."""
+"""LLM engine interface using llama-cpp-python or Native Pure-Python GGUF Engine."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import random
 import time
 from typing import Iterator
 
+from aicreator.gguf_engine import GGUFInferenceEngine, GGUFModel
 from aicreator.grammar import build_grammar
 from aicreator.prompts import SYSTEM_PROMPT
 
@@ -44,7 +45,6 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
     commands = []
 
     if "лес" in p_lower or "дерев" in p_lower or "forest" in p_lower or "tree" in p_lower:
-        # Spawn forest of cylinders (trunks) and cones/spheres (crowns)
         for i in range(8):
             rx = random.uniform(-15.0, 15.0)
             rz = random.uniform(-15.0, 15.0)
@@ -72,7 +72,6 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
         })
 
     elif "волк" in p_lower or "олен" in p_lower or "стая" in p_lower or "wolf" in p_lower:
-        # Wolves and deer
         for i in range(3):
             commands.append({
                 "action": "spawn_creature",
@@ -93,7 +92,6 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
             })
 
     elif "замок" in p_lower or "крепост" in p_lower or "castle" in p_lower or "tower" in p_lower:
-        # Castle towers & walls
         tower_coords = [(-6, -6), (6, -6), (6, 6), (-6, 6)]
         for tx, tz in tower_coords:
             commands.append({
@@ -110,7 +108,6 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
                 "scale": [2.2, 2.0, 2.2],
                 "color": [0, 143, 17],
             })
-        # Central keep
         commands.append({
             "action": "spawn",
             "type": "cube",
@@ -171,7 +168,6 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
             })
 
     else:
-        # Generic synthesis: geometric altar + creature
         commands.append({
             "action": "spawn",
             "type": "torus",
@@ -205,11 +201,12 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
 
 
 class CreatorLLM:
-    """Local LLM engine with GBNF grammar constraints, hot-reloading, and simulated fallback."""
+    """Local LLM engine with GBNF grammar constraints, pure-Python GGUF fallback, and hot-reloading."""
 
     __slots__ = (
         "model_path",
         "llm",
+        "gguf_engine",
         "grammar_str",
         "grammar",
         "threads",
@@ -224,6 +221,7 @@ class CreatorLLM:
         self.grammar_str = build_grammar()
         self.grammar = None
         self.llm = None
+        self.gguf_engine = None
         self.is_simulated = True
         self.temperature = 0.2
         self.n_ctx = 4096
@@ -239,7 +237,7 @@ class CreatorLLM:
         n_gpu_layers: int = 0,
         temperature: float = 0.2,
     ) -> tuple[bool, str]:
-        """Dynamically load or reload a GGUF model or switch to built-in generator."""
+        """Dynamically load GGUF model via llama-cpp-python or pure-Python GGUF engine."""
         self.temperature = temperature
         self.n_ctx = n_ctx
         if n_threads:
@@ -247,18 +245,19 @@ class CreatorLLM:
 
         if not model_path or model_path.strip() == "" or model_path.lower() == "builtin":
             self.llm = None
+            self.gguf_engine = None
             self.model_path = None
             self.is_simulated = True
             return True, "Активирован встроенный процедурный генератор AI Creator."
 
         if not os.path.isfile(model_path):
-            # Check relative to models dir
             alt_path = os.path.join("models", model_path)
             if os.path.isfile(alt_path):
                 model_path = alt_path
             else:
                 return False, f"Файл модели не найден: {model_path}"
 
+        # 1. Try loading via llama_cpp if library is installed
         try:
             from llama_cpp import Llama, LlamaGrammar
 
@@ -274,22 +273,52 @@ class CreatorLLM:
                 use_mmap=True,
                 verbose=False,
             )
+            self.gguf_engine = None
             self.model_path = model_path
             self.is_simulated = False
             model_name = os.path.basename(model_path)
-            return True, f"Модель успешно загружена: {model_name}"
-        except Exception as e:
+            return True, f"Модель успешно загружена через llama-cpp: {model_name}"
+        except Exception:
+            self.llm = None
+
+        # 2. Native Pure-Python GGUF Engine (Works without llama_cpp or C-compilers)
+        try:
+            engine = GGUFInferenceEngine(
+                model_path=model_path,
+                n_ctx=n_ctx,
+                threads=self.threads,
+                temperature=temperature,
+            )
+            self.gguf_engine = engine
+            self.model_path = model_path
+            self.is_simulated = False
+            m = engine.model
+            msg = (
+                f"Модель {m.name} успешно загружена через встроенный GGUF Engine "
+                f"({m.architecture}, {m.tensor_count} тензоров, квантование {m.quantization_str})"
+            )
+            return True, msg
+        except Exception as err:
+            self.gguf_engine = None
             self.llm = None
             self.is_simulated = True
-            return False, f"Ошибка загрузки модели {model_path}: {e}"
+            return False, f"Ошибка загрузки GGUF файла: {err}"
 
     def get_model_info(self) -> dict[str, str | int | bool | float]:
         """Return current model metadata and engine state."""
+        if self.llm is not None:
+            engine_str = "llama-cpp-python"
+        elif self.gguf_engine is not None:
+            m = self.gguf_engine.model
+            engine_str = f"Native GGUF ({m.architecture}, {m.quantization_str})"
+        else:
+            engine_str = "Built-in Procedural AI"
+
         return {
             "model_path": self.model_path or "",
             "model_name": os.path.basename(self.model_path) if self.model_path else "Встроенный генератор (Built-in)",
             "is_simulated": self.is_simulated,
-            "engine": "llama-cpp-python" if not self.is_simulated else "Built-in Procedural AI",
+            "engine": engine_str,
             "threads": self.threads,
             "n_ctx": self.n_ctx,
             "temperature": self.temperature,
@@ -316,6 +345,11 @@ class CreatorLLM:
                 return
             except Exception:
                 pass
+
+        if not self.is_simulated and self.gguf_engine is not None:
+            for token in self.gguf_engine.generate(user_prompt):
+                yield token
+            return
 
         # Simulated fallback generation streaming character chunks
         out_json = _procedural_creator_fallback(user_prompt)
