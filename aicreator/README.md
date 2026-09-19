@@ -17,14 +17,15 @@ All creatures live, wander, hunt, flee, socialize, and sleep autonomously via a 
 
 - **Python:** `>= 3.10.0, < 3.11` (Strictly targets Python 3.10)
 - **CPU Only:** Zero GPU required; uses CPU quantized inference (`n_gpu_layers=0`, `mmap=True`)
-- **Offline:** 100% functional without an internet connection once model weights are available
-- **Zero Heavy Math Dependencies:** Pure Python 3D vector and matrix math (no NumPy, no SciPy)
+- **Offline & Zero-External-Download:** 100% functional without an internet connection or external package downloads. Includes pure-Python compatibility stubs for Pydantic and Rich so standard Python environments run immediately.
+- **Cross-Platform:** Native support for Windows 11 (VT100 escape codes, UTF-8 code pages, and non-blocking `msvcrt` input) as well as Linux and macOS.
+- **Zero Heavy Math Dependencies:** Pure Python 3D vector and matrix math (no NumPy, no SciPy).
 
 ---
 
-## 📦 Installation
+## 📦 Installation & Module Execution
 
-Install both the rendering library and application in editable mode:
+Install both packages in editable mode:
 
 ```bash
 make install
@@ -36,23 +37,32 @@ pip install -e ./matrixholo
 pip install -e ./aicreator
 ```
 
+Or run directly without any installation using the repository root launcher:
+```bash
+python main.py
+```
+
 ---
 
 ## 🚀 Quick Start
 
 Run the sandbox with a local GGUF model:
 ```bash
-aicreator --model models/llama-3-8b.Q4_K_M.gguf
+python -m aicreator --model models/llama-3-8b.Q4_K_M.gguf
+# or via root launcher:
+python main.py --model models/llama-3-8b.Q4_K_M.gguf
 ```
 
 Or run without a model to explore using the built-in Creator engine:
 ```bash
-aicreator
+python -m aicreator
+# or
+python main.py
 ```
 
 Or test a creation prompt directly:
 ```bash
-aicreator --prompt "Создай лес и оленей" --frames 30
+python main.py --prompt "Создай лес и оленей" --frames 30
 ```
 
 ---
@@ -98,12 +108,16 @@ In the sandbox, press `:` or `/` to open the chat prompt, then type any idea:
 - **`behavior.py`**: Autonomous creature FSM (`IDLE`, `WANDER`, `FLEE`, `HUNT`, `SOCIALIZE`, `SLEEP`, `EAT`) with sine limb oscillations.
 - **`stream.py`**: Threaded non-blocking token stream between local LLM and UI.
 - **`ui.py`**: Rich-powered split-screen terminal layout with real-time stats and streaming logs.
+- **`_pydantic_compat.py`**: Pure-Python Pydantic v2 core fallback.
+- **`_rich_compat.py`**: Pure-Python Rich panel and ANSI styling fallback.
 
 ---
 
 ## 🧪 Testing
 
 ```bash
+python main.py --test
+# or
 make test
 ```
 

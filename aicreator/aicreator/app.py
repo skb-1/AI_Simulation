@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import select
 import shutil
 import sys
 import time
@@ -16,6 +15,11 @@ from aicreator.stream import MSG_DONE, MSG_ERROR, MSG_TOKEN, GenerationWorker
 from aicreator.ui import ChatUI
 from aicreator.world import World
 from matrixholo.camera import Camera
+from matrixholo.platform_compat import (
+    IS_WINDOWS,
+    read_key_nonblocking,
+    setup_terminal,
+)
 from matrixholo.primitives import torus
 from matrixholo.scene import Scene
 from matrixholo.terminal import TerminalRenderer
@@ -49,6 +53,7 @@ class AICreatorApp:
         width: int | None = None,
         height: int | None = None,
     ) -> None:
+        setup_terminal()
         term_size = shutil.get_terminal_size((120, 36))
         self.width = width or term_size.columns
         self.height = height or term_size.lines
@@ -90,48 +95,38 @@ class AICreatorApp:
         self.world.update(0.01, self.camera.pos)
 
     def handle_input(self) -> None:
-        """Handle non-blocking keyboard input for camera navigation and chat."""
-        if not sys.stdin.isatty():
+        """Handle non-blocking keyboard input across Windows 11 and Unix."""
+        key = read_key_nonblocking()
+        if not key:
             return
-
-        r, _, _ = select.select([sys.stdin], [], [], 0.0)
-        if not r:
-            return
-
-        ch = sys.stdin.read(1)
 
         # In Chat Typing Mode
         if self.chat_mode:
-            if ch in ("\r", "\n"):
+            if key == "ENTER":
                 prompt = self.chat_input_buffer.strip()
                 self.chat_mode = False
                 self.chat_input_buffer = ""
                 if prompt:
                     self.submit_prompt(prompt)
-            elif ch in ("\x7f", "\x08"):  # Backspace
+            elif key == "BACKSPACE":
                 self.chat_input_buffer = self.chat_input_buffer[:-1]
-            elif ch == "\x1b":  # ESC: cancel
+            elif key == "ESC":
                 self.chat_mode = False
                 self.chat_input_buffer = ""
-            elif ord(ch) >= 32:
-                self.chat_input_buffer += ch
+            elif len(key) == 1 and ord(key) >= 32:
+                self.chat_input_buffer += key
             return
 
         # In Camera Navigation Mode
-        if ch == "\x1b":
-            # Arrow key sequences
-            seq = sys.stdin.read(2) if select.select([sys.stdin], [], [], 0.05)[0] else ""
-            if seq == "[A":
+        match key:
+            case "UP":
                 self.camera.rotate(0.0, 0.08)
-            elif seq == "[B":
+            case "DOWN":
                 self.camera.rotate(0.0, -0.08)
-            elif seq == "[C":
+            case "RIGHT":
                 self.camera.rotate(0.08, 0.0)
-            elif seq == "[D":
+            case "LEFT":
                 self.camera.rotate(-0.08, 0.0)
-            return
-
-        match ch:
             case "w" | "W":
                 self.camera.move(forward=1.2, right=0.0)
             case "s" | "S":
@@ -194,7 +189,7 @@ class AICreatorApp:
                 last_t = now
                 measured_fps = measured_fps * 0.9 + (1.0 / dt) * 0.1
 
-                # 1. Non-blocking input
+                # 1. Non-blocking input (Windows 11 / Unix)
                 self.handle_input()
 
                 # 2. LLM worker queue

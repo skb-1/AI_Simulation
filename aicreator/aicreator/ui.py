@@ -5,10 +5,13 @@ from __future__ import annotations
 import io
 from typing import Sequence
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
+try:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+except ImportError:
+    from aicreator._rich_compat import Console, Panel, Table, Text  # type: ignore
 
 
 class ChatUI:

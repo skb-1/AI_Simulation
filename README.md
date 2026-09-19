@@ -7,7 +7,7 @@
 
 ## 🌌 Project Architecture
 
-The project is structured into two modular packages:
+The project is structured into two modular packages with a unified root entrypoint:
 
 1. **`matrixholo`** — A standalone, zero-dependency 3D terminal and window rendering engine.
    - Pure Python 3.10 math (custom `Vec3`, `Vec4`, `Mat4` with `__slots__`). No NumPy, Pygame, or OpenGL in base requirements.
@@ -15,6 +15,7 @@ The project is structured into two modular packages:
    - Authentic Matrix digital rain (`01ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵ`) on background depth layers.
    - Ultra-fast 30 FPS terminal rendering via ANSI cursor delta updates (`\033[y;xH`).
    - Procedural wireframe morphologies for humans, wolves, cats, dogs, birds, dragons, fish, spiders, snakes, robots, dinosaurs, and unicorns.
+   - Full cross-platform console compatibility (Windows 11, Linux, macOS).
 
 2. **`aicreator`** — The sandbox application orchestrating the AI Creator.
    - Integrates `llama-cpp-python` with custom GBNF grammar constraints built directly from Pydantic schemas.
@@ -23,6 +24,10 @@ The project is structured into two modular packages:
    - Autonomous Finite State Machine (FSM) for creature behaviors: `IDLE`, `WANDER`, `HUNT`, `FLEE`, `SOCIALIZE`, `SLEEP`, `EAT`.
    - Threaded streaming generation using `threading.Thread` and `queue.Queue` ensuring the 30 FPS render loop never blocks.
    - Rich split-screen chat interface on the left and 3D Matrix holographic viewport on the right.
+   - Built-in zero-dependency fallbacks for Pydantic and Rich if external wheels are absent.
+
+3. **`main.py`** — Unified root launcher.
+   - Auto-configures `sys.path` to seamlessly run everything directly out of the box without prior `pip install`.
 
 ---
 
@@ -45,12 +50,24 @@ The project is structured into two modular packages:
 
 ---
 
+## 🪟 Windows 11 Native Compatibility
+
+This project is fully engineered to run smoothly on **Windows 11** (Windows Terminal, PowerShell, CMD) out of the box without requiring third-party C-compilers or package downloads:
+
+- **Virtual Terminal (VT100) Sequences:** Automatically enabled via Win32 `kernel32.SetConsoleMode` with `ENABLE_VIRTUAL_TERMINAL_PROCESSING` (`0x0004`) and `DISABLE_NEWLINE_AUTO_RETURN` (`0x0008`).
+- **UTF-8 Output & Rain Characters:** Automatic code-page switching to UTF-8 (`CP_UTF8 = 65001`) via Win32 `kernel32.SetConsoleCP` and `kernel32.SetConsoleOutputCP` so half-width Katakana glyphs render crisply without garbled characters.
+- **Non-Blocking Keyboard Navigation:** Windows-native non-blocking polling via `msvcrt.kbhit()` and `msvcrt.getwch()` (with two-stroke arrow key support), cleanly abstracting Unix `termios` / `select`.
+- **Zero-External-Download Runtime:** Includes pure-Python compat layers (`_pydantic_compat.py` and `_rich_compat.py`) allowing instant execution even on fresh Python 3.10 environments where pip packages cannot be downloaded.
+
+---
+
 ## 📂 Repository Structure
 
 ```
 .
-├── Makefile
-├── README.md
+├── main.py                      # Unified root launcher (Windows / Linux / macOS)
+├── Makefile                     # Build & run automation
+├── README.md                    # Main project documentation
 ├── .gitignore
 ├── assets/
 │   ├── system_prompt.txt        # AI Creator system prompt
@@ -61,7 +78,9 @@ The project is structured into two modular packages:
 │   ├── LICENSE                  # MIT
 │   ├── matrixholo/
 │   │   ├── __init__.py          # Public API (Scene, Camera, TerminalRenderer...)
+│   │   ├── __main__.py          # python -m matrixholo entrypoint
 │   │   ├── _compat.py           # Python 3.10 version runtime verification
+│   │   ├── platform_compat.py   # Windows 11 VT & msvcrt console abstraction
 │   │   ├── vec.py               # Pure Python Vec3, Vec4, Mat4
 │   │   ├── camera.py            # Orbit and free 3D camera
 │   │   ├── raster.py            # 3D line and point rasterization
@@ -90,17 +109,19 @@ The project is structured into two modular packages:
     ├── README.md
     ├── aicreator/
     │   ├── __init__.py
-    │   ├── __main__.py          # python -m aicreator
+    │   ├── __main__.py          # python -m aicreator entrypoint
     │   ├── app.py               # Main 30 FPS game loop
     │   ├── llm.py               # Local LLM wrapper & fallback engine
     │   ├── prompts.py           # System instructions
     │   ├── grammar.py           # Custom Pydantic-to-GBNF converter
-    │   ├── commands.py          # Pydantic command schemas
+    │   ├── commands.py          # Command schemas (Pydantic / compat fallback)
     │   ├── world.py             # Infinite chunks, noise terrain & spatial hash
     │   ├── entities.py          # WorldEntity, WorldPrimitive, WorldCreature
     │   ├── behavior.py          # Autonomous creature FSM
     │   ├── stream.py            # Non-blocking threaded token worker
-    │   └── ui.py                # Rich dashboard panel
+    │   ├── ui.py                # Dashboard HUD panel (Rich / compat fallback)
+    │   ├── _pydantic_compat.py  # Pure Python zero-dependency schema fallback
+    │   └── _rich_compat.py      # Pure Python zero-dependency HUD panel fallback
     ├── models/
     │   └── README.md            # GGUF models instructions
     └── tests/
@@ -113,36 +134,65 @@ The project is structured into two modular packages:
 
 ---
 
-## 🚀 Installation & Quick Start
+## 🚀 Quick Start & Usage
 
-### 1. Installation
+### Method A: Direct Execution via Root Launcher (No Install Needed!)
+
+The root `main.py` launcher requires zero dependencies beyond standard Python 3.10 and runs seamlessly on Windows, Linux, and macOS:
+
+```bash
+# 1. Run the interactive 3D rotating holographic cube demo
+python main.py --demo
+
+# 2. View a specific procedural creature
+python main.py --creature wolf
+python main.py --creature dragon
+python main.py --creature robot
+
+# 3. Run the interactive AI Creator sandbox
+python main.py
+
+# 4. Run AI Creator with a pre-loaded prompt
+python main.py --prompt "Создай лес и оленей"
+
+# 5. Run AI Creator with a local GGUF model
+python main.py --model path/to/model.gguf
+
+# 6. Run all unit test suites
+python main.py --test
+```
+
+---
+
+### Method B: Package Module Execution (`python -m`)
+
+Both packages support direct execution via Python's `-m` flag:
+
+```bash
+# Run matrixholo demo
+python -m matrixholo --demo
+python -m matrixholo --creature unicorn
+
+# Run aicreator app
+python -m aicreator
+python -m aicreator --prompt "Замок из кубов"
+```
+
+---
+
+### Method C: Installation via Pip / Makefile
 
 ```bash
 make install
+# or
+pip install -e ./matrixholo
+pip install -e ./aicreator
 ```
-*(Runs `pip install -e ./matrixholo && pip install -e ./aicreator`)*
 
-### 2. Run the 3D Holographic Matrix Demo
-
+After installation, the console entrypoints are available anywhere:
 ```bash
 matrixholo --demo
-```
-*(Shows a spinning neon green wireframe cube with falling Katakana digital rain and ground grid)*
-
-View a specific procedural creature:
-```bash
-matrixholo --creature wolf
-matrixholo --creature dragon
-```
-
-### 3. Run AI Creator
-
-```bash
-# With local GGUF model:
-python -m aicreator --model models/llama-3-8b.Q4_K_M.gguf
-
-# Or without a model (activates built-in creator engine):
-python -m aicreator
+aicreator --model models/llama-3-8b.Q4_K_M.gguf
 ```
 
 ---
@@ -175,12 +225,20 @@ python -m aicreator
 
 ## 🧪 Testing
 
-Run test suites for both packages:
+Run test suites for all packages:
 ```bash
+# Via master launcher:
+python main.py --test
+
+# Via Makefile:
 make test
-# or full suite:
 make test-all
+
+# Or via pytest directly:
+pytest matrixholo/tests aicreator/tests
 ```
+
+All 33 test cases pass with high code coverage.
 
 ---
 

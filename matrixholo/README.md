@@ -9,6 +9,7 @@
 ## ⚡ Features
 
 - **Pure Python 3.10:** No NumPy, no SciPy, no Pygame, no OpenGL in base dependencies.
+- **Cross-Platform & Windows 11 Ready:** Automatically activates Windows Virtual Terminal Processing (`ENABLE_VIRTUAL_TERMINAL_PROCESSING`), switches console to UTF-8 (`CP_UTF8 = 65001`), and handles non-blocking keyboard input via `msvcrt`. Works equally seamlessly on Linux and macOS.
 - **Matrix Aesthetic:** Cyberpunk neon green palette (`#00FF41`, `#008F11`, `#003B00`), authentic half-width Katakana digital rain (`01ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵ`), depth-shading, and flicker artifacts.
 - **Z-Buffer & Occlusion:** Real-time depth buffer with alpha-blending ensures 3D wireframe models naturally occlude background digital rain.
 - **Ultra-Fast Delta Updates:** Emits ANSI cursor movements (`\033[y;xH`) exclusively for changed terminal cells, eliminating screen flicker and maintaining smooth 30 FPS.
@@ -17,15 +18,21 @@
 
 ---
 
-## 📦 Installation
+## 📦 Installation & Module Execution
 
+Install from local source:
 ```bash
-pip install matrixholo
+pip install ./matrixholo
+```
+
+Or run directly without installation via Python module:
+```bash
+python -m matrixholo --demo
 ```
 
 Optional Pyglet window mode:
 ```bash
-pip install matrixholo[window]
+pip install ./matrixholo[window]
 ```
 
 ---
@@ -35,12 +42,15 @@ pip install matrixholo[window]
 Run the interactive rotating holographic cube demo:
 ```bash
 matrixholo --demo
+# or
+python -m matrixholo --demo
 ```
 
 Or view a procedural creature:
 ```bash
-matrixholo --creature wolf
-matrixholo --creature dragon
+python -m matrixholo --creature wolf
+python -m matrixholo --creature dragon
+python -m matrixholo --creature robot
 ```
 
 ---

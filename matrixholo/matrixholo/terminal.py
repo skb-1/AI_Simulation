@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import os
-import select
 import shutil
 import sys
-import termios
 import time
-import tty
 from typing import Any, Tuple
 
 from matrixholo.camera import Camera
+from matrixholo.platform_compat import (
+    IS_WINDOWS,
+    read_key_nonblocking,
+    setup_terminal,
+)
 from matrixholo.rain import DigitalRain
 from matrixholo.raster import draw_point, render_projected_line
 from matrixholo.scene import Scene
@@ -46,6 +48,7 @@ class TerminalRenderer:
         enable_rain: bool = True,
         enable_input: bool = False,
     ) -> None:
+        setup_terminal()
         term_size = shutil.get_terminal_size((120, 36))
         self.width = width or term_size.columns
         self.height = height or term_size.lines
@@ -68,32 +71,35 @@ class TerminalRenderer:
 
     def enter_screen(self) -> None:
         """Switch terminal to alternate screen buffer and hide cursor."""
+        setup_terminal()
         if sys.stdout.isatty():
-            # \033[?1049h: switch to alt buffer
-            # \033[?25l: hide cursor
-            # \033[2J: clear screen
             sys.stdout.write("\033[?1049h\033[?25l\033[2J\033[H")
             sys.stdout.flush()
             self.alt_screen = True
-            if self._enable_input:
-                try:
-                    self._old_term_settings = termios.tcgetattr(sys.stdin)
-                    tty.setcbreak(sys.stdin.fileno())
-                except Exception:
-                    pass
+
+        if not IS_WINDOWS and self._enable_input and sys.stdin.isatty():
+            try:
+                import termios
+                import tty
+
+                self._old_term_settings = termios.tcgetattr(sys.stdin)
+                tty.setcbreak(sys.stdin.fileno())
+            except Exception:
+                pass
 
     def exit_screen(self) -> None:
         """Restore standard terminal buffer and reveal cursor."""
-        if self._old_term_settings is not None:
+        if not IS_WINDOWS and self._old_term_settings is not None:
             try:
+                import termios
+
                 termios.tcsetattr(
                     sys.stdin, termios.TCSADRAIN, self._old_term_settings
                 )
             except Exception:
                 pass
+
         if self.alt_screen and sys.stdout.isatty():
-            # \033[?25h: show cursor
-            # \033[?1049l: restore normal screen
             sys.stdout.write("\033[?25h\033[?1049l\033[0m\n")
             sys.stdout.flush()
             self.alt_screen = False
@@ -111,56 +117,39 @@ class TerminalRenderer:
             sys.stdout.flush()
 
     def read_input(self, cam: Camera | None = None) -> str | None:
-        """Read non-blocking keyboard input for camera control and commands."""
-        if not sys.stdin.isatty():
+        """Read non-blocking keyboard input across Windows 11 and Unix."""
+        key = read_key_nonblocking()
+        if not key:
             return None
-
-        # Check if stdin has data ready without blocking
-        r, _, _ = select.select([sys.stdin], [], [], 0.0)
-        if not r:
-            return None
-
-        ch = sys.stdin.read(1)
-        if ch == "\033":
-            # Check for escape sequence (arrow keys)
-            seq = sys.stdin.read(2) if select.select([sys.stdin], [], [], 0.05)[0] else ""
-            if seq == "[A":  # Up arrow
-                if cam:
-                    cam.rotate(0.0, 0.08)
-                return "UP"
-            elif seq == "[B":  # Down arrow
-                if cam:
-                    cam.rotate(0.0, -0.08)
-                return "DOWN"
-            elif seq == "[C":  # Right arrow
-                if cam:
-                    cam.rotate(0.08, 0.0)
-                return "RIGHT"
-            elif seq == "[D":  # Left arrow
-                if cam:
-                    cam.rotate(-0.08, 0.0)
-                return "LEFT"
-            return "ESC"
 
         if cam:
-            if ch in ("w", "W"):
-                cam.move(forward=1.0, right=0.0)
-            elif ch in ("s", "S"):
-                cam.move(forward=-1.0, right=0.0)
-            elif ch in ("a", "A"):
-                cam.move(forward=0.0, right=-1.0)
-            elif ch in ("d", "D"):
-                cam.move(forward=0.0, right=1.0)
-            elif ch in ("e", "E", " "):
-                cam.move(forward=0.0, right=0.0, up=1.0)
-            elif ch in ("c", "C"):
-                cam.move(forward=0.0, right=0.0, up=-1.0)
-            elif ch in ("+", "="):
-                cam.zoom(-1.5)
-            elif ch in ("-", "_"):
-                cam.zoom(1.5)
+            match key:
+                case "w" | "W":
+                    cam.move(forward=1.0, right=0.0)
+                case "s" | "S":
+                    cam.move(forward=-1.0, right=0.0)
+                case "a" | "A":
+                    cam.move(forward=0.0, right=-1.0)
+                case "d" | "D":
+                    cam.move(forward=0.0, right=1.0)
+                case "e" | "E" | " ":
+                    cam.move(forward=0.0, right=0.0, up=1.0)
+                case "c" | "C":
+                    cam.move(forward=0.0, right=0.0, up=-1.0)
+                case "+" | "=":
+                    cam.zoom(-1.5)
+                case "-" | "_":
+                    cam.zoom(1.5)
+                case "UP":
+                    cam.rotate(0.0, 0.08)
+                case "DOWN":
+                    cam.rotate(0.0, -0.08)
+                case "RIGHT":
+                    cam.rotate(0.08, 0.0)
+                case "LEFT":
+                    cam.rotate(-0.08, 0.0)
 
-        return ch
+        return key
 
     def render(self, scene: Scene, camera: Camera) -> None:
         """Render complete scene and digital rain at 30 FPS target."""
@@ -197,7 +186,6 @@ class TerminalRenderer:
             # LOD threshold check: distant objects render as single points
             dist = (entity.position - camera.pos).length()
             if dist > entity.lod_threshold:
-                # Render single representative point
                 center_clip = mvp.transform_point(Vec3(0, 0, 0))
                 if center_clip.z > 0.1:
                     from matrixholo.raster import ndc_to_screen
@@ -262,11 +250,9 @@ class TerminalRenderer:
                 if ch != p_ch or col != p_col:
                     prev[idx] = (ch, col)
                     if not consecutive_changed:
-                        # Reposition cursor: \033[{row};{col}H
                         out.append(f"\033[{row_y};{x + 1}H")
                         consecutive_changed = True
 
-                    # Update ANSI truecolor if changed
                     if col != cur_color:
                         cur_color = col
                         out.append(f"\033[38;2;{col[0]};{col[1]};{col[2]}m")
@@ -277,7 +263,6 @@ class TerminalRenderer:
                 idx += 1
 
         if out:
-            # Append reset code at end
             out.append("\033[0m")
             sys.stdout.write("".join(out))
             sys.stdout.flush()
