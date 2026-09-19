@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """AI Creator — Holographic Matrix Sandbox: Unified Launcher for Windows 11, Linux, macOS.
 
-Zero extra downloads required. Runs out of the box on Python 3.10.0.
+Zero extra downloads required. Runs out of the box on Python 3.10+.
 
 Usage examples:
-    python main.py                           # Launch Holographic Matrix GUI Studio (port 8000)
-    python main.py --desktop                 # Launch native PySide6 Desktop Window (if installed)
+    python main.py                           # Launch Holographic Matrix Studio (http://localhost:8000/)
+    python main.py --desktop                 # Launch native Desktop Window (PySide6 / Tkinter)
     python main.py --cli                     # Launch interactive terminal sandbox
     python main.py --demo                    # Launch matrixholo 3D wireframe demo
     python main.py --creature wolf           # Preview a procedural creature
@@ -54,18 +54,18 @@ def main() -> int:
     """Unified command-line dispatcher."""
     parser = argparse.ArgumentParser(
         prog="main.py",
-        description="AI Creator — Holographic Matrix Sandbox (PySide6 / Web Holographic Studio)",
+        description="AI Creator — Holographic Matrix Sandbox (PySide6 / Tkinter / Web Studio)",
     )
     parser.add_argument(
         "--gui",
         action="store_true",
         default=True,
-        help="Launch PySide6-styled Holographic Matrix GUI Studio (default)",
+        help="Launch PySide6-styled Holographic Matrix Studio (default)",
     )
     parser.add_argument(
         "--desktop",
         action="store_true",
-        help="Launch native PySide6 / PyQt OS window (requires PySide6)",
+        help="Launch native desktop window (PySide6 or Tkinter)",
     )
     parser.add_argument(
         "--cli",
@@ -99,7 +99,7 @@ def main() -> int:
         "--port",
         type=int,
         default=8000,
-        help="Port for Holographic GUI server (default: 8000)",
+        help="Port for Holographic Studio server (default: 8000)",
     )
     parser.add_argument(
         "--host",
@@ -172,15 +172,24 @@ def main() -> int:
         return app.run(frames=args.frames, initial_prompt=args.prompt)
 
     if args.desktop:
-        # Native PySide6 Desktop GUI Window
+        # 1. Try PySide6 / PyQt native window
         from aicreator.gui_pyside import QT_LIB, run_pyside_app
 
         if QT_LIB is not None:
+            print(f"[*] Запуск нативного десктопного окна ({QT_LIB})...")
             return run_pyside_app(model_path=args.model)
-        print("[!] PySide6 or PyQt is not installed in the environment.")
-        print("[*] Falling back to zero-dependency PySide6-styled Holographic Matrix Studio...")
 
-    # Default: launch PySide6-styled Holographic Matrix Web GUI Studio
+        # 2. Try Tkinter native desktop window
+        from aicreator.gui_tkinter import TK_AVAILABLE, run_tkinter_app
+
+        if TK_AVAILABLE:
+            print("[*] PySide6 не установлен. Запуск нативного десктопного окна Tkinter...")
+            return run_tkinter_app(model_path=args.model)
+
+        print("[!] Графический дисплей недоступен для PySide6/Tkinter.")
+        print("[*] Запуск голографической студии на http://localhost:8000/ ...")
+
+    # Default: launch PySide6-styled Holographic Matrix Studio Server
     from aicreator.gui_server import run_gui_server
 
     try:

@@ -11,14 +11,15 @@ Provides a full PySide6-styled holographic cyberpunk web GUI with:
 
 from __future__ import annotations
 
-import cgi
 import glob
 import json
 import math
 import os
+import re
 import sys
 import threading
 import time
+import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
@@ -1542,23 +1543,31 @@ class HolographicHTTPHandler(BaseHTTPRequestHandler):
         if url.path == "/api/models/upload":
             ctype = self.headers.get("Content-Type", "")
             if "multipart/form-data" in ctype:
-                form = cgi.FieldStorage(
-                    fp=self.rfile,
-                    headers=self.headers,
-                    environ={
-                        "REQUEST_METHOD": "POST",
-                        "CONTENT_TYPE": ctype,
-                    },
-                )
-                if "file" in form and form["file"].filename:
-                    item = form["file"]
-                    fname = os.path.basename(item.filename)
-                    os.makedirs("models", exist_ok=True)
-                    out_path = os.path.join("models", fname)
-                    with open(out_path, "wb") as f:
-                        f.write(item.file.read())
-                    self._send_json({"ok": True, "path": out_path, "name": fname})
-                    return
+                boundary = None
+                for part in ctype.split(";"):
+                    part = part.strip()
+                    if part.startswith("boundary="):
+                        boundary = part[len("boundary="):].strip('"\'').encode()
+                        break
+                if boundary:
+                    raw_body = self.rfile.read(content_len)
+                    parts = raw_body.split(b"--" + boundary)
+                    for part in parts:
+                        if b'filename="' in part:
+                            header_end = part.find(b"\r\n\r\n")
+                            if header_end != -1:
+                                header = part[:header_end].decode("utf-8", errors="replace")
+                                file_content = part[header_end + 4:]
+                                if file_content.endswith(b"\r\n"):
+                                    file_content = file_content[:-2]
+                                m = re.search(r'filename="([^"]+)"', header)
+                                fname = os.path.basename(m.group(1)) if m else "model.gguf"
+                                os.makedirs("models", exist_ok=True)
+                                out_path = os.path.join("models", fname)
+                                with open(out_path, "wb") as f:
+                                    f.write(file_content)
+                                self._send_json({"ok": True, "path": out_path, "name": fname})
+                                return
             self._send_json({"ok": False, "message": "Файл не получен"})
             return
 
@@ -1588,9 +1597,28 @@ def run_gui_server(host: str = "0.0.0.0", port: int = 8000, model_path: str | No
     threading.Thread(target=sim_loop, daemon=True).start()
 
     server = ThreadingHTTPServer((host, port), HolographicHTTPHandler)
-    print(f"\n[+] AI CREATOR — HOLOGRAPHIC MATRIX SANDBOX")
-    print(f"[*] GUI Server listening at: http://{host}:{port}")
-    print(f"[*] Press Ctrl+C to terminate.")
+    local_url = f"http://localhost:{port}/"
+    alt_url = f"http://127.0.0.1:{port}/"
+
+    print("\n" + "=" * 72)
+    print("  AI CREATOR — HOLOGRAPHIC MATRIX STUDIO")
+    print("=" * 72)
+    print(f"  [>] Local Browser URL:    {local_url}")
+    print(f"  [>] Alternate URL:        {alt_url}")
+    print(f"  [>] Network Bind:         http://{host}:{port}/")
+    print("=" * 72)
+    print("  [*] Opening browser automatically...")
+    print("  [*] Press Ctrl+C in this console to stop the server.\n")
+
+    # Auto-open browser on local machine (Windows / macOS / Linux desktop)
+    def open_browser():
+        time.sleep(0.8)
+        try:
+            webbrowser.open(local_url)
+        except Exception:
+            pass
+
+    threading.Thread(target=open_browser, daemon=True).start()
 
     try:
         server.serve_forever()
