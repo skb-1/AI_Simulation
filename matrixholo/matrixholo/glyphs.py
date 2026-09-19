@@ -10,6 +10,7 @@ MATRIX_KATAKANA = "ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹ�
 MATRIX_DIGITS = "0123456789"
 MATRIX_SYMBOLS = ":・.*=+-_¦|"
 MATRIX_CHARS: tuple[str, ...] = tuple(MATRIX_KATAKANA + MATRIX_DIGITS + MATRIX_SYMBOLS)
+RAIN_CHARS: tuple[str, ...] = MATRIX_CHARS
 
 # Wireframe glyph set specified in prompt
 WIREFRAME_GLYPHS: tuple[str, ...] = tuple("01ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵ")

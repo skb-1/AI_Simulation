@@ -13,9 +13,29 @@ from aicreator.grammar import build_grammar
 from aicreator.prompts import SYSTEM_PROMPT
 
 
-def find_gguf_models(search_dir: str = "models") -> list[str]:
-    """Scan directory for .gguf model weights."""
-    return sorted(glob.glob(os.path.join(search_dir, "*.gguf")))
+def find_gguf_models(search_dirs: list[str] | None = None) -> list[dict[str, str | int]]:
+    """Scan directories for .gguf model weights and return metadata list."""
+    if search_dirs is None:
+        search_dirs = ["models", "aicreator/models", "."]
+
+    found: list[dict[str, str | int]] = []
+    seen: set[str] = set()
+
+    for s_dir in search_dirs:
+        if not os.path.exists(s_dir):
+            continue
+        for p in sorted(glob.glob(os.path.join(s_dir, "*.gguf"))):
+            abs_p = os.path.abspath(p)
+            if abs_p not in seen and os.path.isfile(abs_p):
+                seen.add(abs_p)
+                size_mb = os.path.getsize(abs_p) // (1024 * 1024)
+                found.append({
+                    "path": abs_p,
+                    "rel_path": p,
+                    "name": os.path.basename(p),
+                    "size_mb": size_mb,
+                })
+    return found
 
 
 def _procedural_creator_fallback(user_prompt: str) -> str:
@@ -139,6 +159,17 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
                 "traits": {"speed": random.uniform(1.8, 3.2), "aggression": agg},
             })
 
+    elif "робот" in p_lower or "robot" in p_lower:
+        for i in range(3):
+            commands.append({
+                "action": "spawn_creature",
+                "kind": "animal",
+                "species": "robot",
+                "position": [random.uniform(-6, 6), 0.0, random.uniform(-6, 6)],
+                "name": f"Unit_{i+1}",
+                "traits": {"speed": 2.0, "aggression": 0.4},
+            })
+
     else:
         # Generic synthesis: geometric altar + creature
         commands.append({
@@ -174,7 +205,7 @@ def _procedural_creator_fallback(user_prompt: str) -> str:
 
 
 class CreatorLLM:
-    """Local LLM engine with GBNF grammar constraints and simulated fallback."""
+    """Local LLM engine with GBNF grammar constraints, hot-reloading, and simulated fallback."""
 
     __slots__ = (
         "model_path",
@@ -183,35 +214,86 @@ class CreatorLLM:
         "grammar",
         "threads",
         "is_simulated",
+        "temperature",
+        "n_ctx",
     )
 
     def __init__(self, model_path: str | None = None) -> None:
-        self.model_path = model_path
+        self.model_path = None
         self.threads = os.cpu_count() or 4
         self.grammar_str = build_grammar()
         self.grammar = None
         self.llm = None
         self.is_simulated = True
+        self.temperature = 0.2
+        self.n_ctx = 4096
 
-        if model_path and os.path.isfile(model_path):
-            try:
-                from llama_cpp import Llama, LlamaGrammar
+        if model_path:
+            self.load_model(model_path)
 
-                self.grammar = LlamaGrammar.from_string(
-                    self.grammar_str, verbose=False
-                )
-                self.llm = Llama(
-                    model_path=model_path,
-                    n_gpu_layers=0,
-                    n_threads=self.threads,
-                    n_batch=512,
-                    n_ctx=4096,
-                    use_mmap=True,
-                    verbose=False,
-                )
-                self.is_simulated = False
-            except Exception:
-                self.is_simulated = True
+    def load_model(
+        self,
+        model_path: str | None,
+        n_ctx: int = 4096,
+        n_threads: int | None = None,
+        n_gpu_layers: int = 0,
+        temperature: float = 0.2,
+    ) -> tuple[bool, str]:
+        """Dynamically load or reload a GGUF model or switch to built-in generator."""
+        self.temperature = temperature
+        self.n_ctx = n_ctx
+        if n_threads:
+            self.threads = n_threads
+
+        if not model_path or model_path.strip() == "" or model_path.lower() == "builtin":
+            self.llm = None
+            self.model_path = None
+            self.is_simulated = True
+            return True, "Активирован встроенный процедурный генератор AI Creator."
+
+        if not os.path.isfile(model_path):
+            # Check relative to models dir
+            alt_path = os.path.join("models", model_path)
+            if os.path.isfile(alt_path):
+                model_path = alt_path
+            else:
+                return False, f"Файл модели не найден: {model_path}"
+
+        try:
+            from llama_cpp import Llama, LlamaGrammar
+
+            self.grammar = LlamaGrammar.from_string(
+                self.grammar_str, verbose=False
+            )
+            self.llm = Llama(
+                model_path=model_path,
+                n_gpu_layers=n_gpu_layers,
+                n_threads=self.threads,
+                n_batch=512,
+                n_ctx=n_ctx,
+                use_mmap=True,
+                verbose=False,
+            )
+            self.model_path = model_path
+            self.is_simulated = False
+            model_name = os.path.basename(model_path)
+            return True, f"Модель успешно загружена: {model_name}"
+        except Exception as e:
+            self.llm = None
+            self.is_simulated = True
+            return False, f"Ошибка загрузки модели {model_path}: {e}"
+
+    def get_model_info(self) -> dict[str, str | int | bool | float]:
+        """Return current model metadata and engine state."""
+        return {
+            "model_path": self.model_path or "",
+            "model_name": os.path.basename(self.model_path) if self.model_path else "Встроенный генератор (Built-in)",
+            "is_simulated": self.is_simulated,
+            "engine": "llama-cpp-python" if not self.is_simulated else "Built-in Procedural AI",
+            "threads": self.threads,
+            "n_ctx": self.n_ctx,
+            "temperature": self.temperature,
+        }
 
     def stream_generate(self, user_prompt: str) -> Iterator[str]:
         """Stream generation tokens chunk-by-chunk."""
@@ -225,7 +307,7 @@ class CreatorLLM:
                     grammar=self.grammar,
                     stream=True,
                     max_tokens=2048,
-                    temperature=0.2,
+                    temperature=self.temperature,
                 )
                 for chunk in stream:
                     text_chunk = chunk["choices"][0]["text"]
@@ -239,5 +321,5 @@ class CreatorLLM:
         out_json = _procedural_creator_fallback(user_prompt)
         chunk_size = 4
         for i in range(0, len(out_json), chunk_size):
-            time.sleep(0.015)
+            time.sleep(0.005)
             yield out_json[i : i + chunk_size]

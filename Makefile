@@ -1,10 +1,16 @@
-.PHONY: install run test test-all demo build clean
+.PHONY: install run gui desktop test test-all demo build clean
 
 install:
 	pip install -e ./matrixholo && pip install -e ./aicreator
 
 run:
-	python -m aicreator
+	python main.py
+
+gui:
+	python main.py --gui --port 8000
+
+desktop:
+	python main.py --desktop
 
 test:
 	pytest matrixholo/tests
